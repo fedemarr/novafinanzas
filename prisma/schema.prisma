@@ -1,0 +1,538 @@
+// ============================================================================
+// Schema aprobado (M0). Ver CLAUDE.md y PROJECT.md para las invariantes de
+// dinero y las reglas de arquitectura que este schema tiene que respetar.
+//
+// Convención elegida: campos en camelCase en el código, mapeados a
+// snake_case en columnas reales vía @map/@@map (PROJECT.md pide snake_case
+// para created_at/updated_at/deleted_at; extendí la misma convención a todo
+// el schema para no mezclar dos estilos de nombres en la misma DB).
+//
+// Leyenda en los comentarios:
+//   [DOC]      viene directo de PROJECT.md
+//   [AGREGADO] lo sumé yo — explico por qué
+//   [DECISIÓN] tomé una decisión donde el doc era ambiguo — explico el criterio
+// ============================================================================
+
+// [DECISIÓN] Prisma 7 cambió el generador por defecto: "prisma-client-js"
+// está deprecado, ahora es "prisma-client" con `output` obligatorio (ya no
+// genera "mágicamente" a node_modules) y la URL de conexión sale del
+// datasource block hacia un driver adapter + prisma.config.ts. Ver
+// src/lib/db/prisma.ts y prisma.config.ts.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// CORE
+// ---------------------------------------------------------------------------
+
+model User {
+  id                String   @id @default(uuid()) @db.Uuid
+  email             String   @unique
+  // [AGREGADO] no estaba en PROJECT.md — Auth.js con Credentials necesita
+  // guardar el hash en algún lado. Uso JWT session strategy (sin
+  // @auth/prisma-adapter) a propósito: el adapter estándar de Auth.js exige
+  // un modelo llamado `Account`, que ya usamos para cuentas bancarias/wallets
+  // del dominio. Mezclarlos habría sido un choque de nombres feo o forzado
+  // un rename de nuestro modelo de negocio por una tabla técnica de auth.
+  passwordHash      String   @map("password_hash")
+  name              String?
+  baseCurrencyCode  String   @map("base_currency_code")
+  baseCurrency      Currency @relation(fields: [baseCurrencyCode], references: [code])
+  countryCode       String   @map("country_code")
+  country           Country  @relation(fields: [countryCode], references: [code])
+  locale            String // ej. "es-AR"
+  timezone          String // IANA tz, ej. "America/Argentina/Buenos_Aires"
+  preferredRateType RateType @map("preferred_rate_type")
+  payCycleDay       Int      @map("pay_cycle_day") // 1–31, día de cobro principal
+  ingestAddress     String   @unique @map("ingest_address") // alias único p/ recibir mails, ej. u-a8f3@dominio
+
+  accounts               Account[]
+  transactions           Transaction[]
+  categories             Category[]
+  commitments            Commitment[]
+  recurringIncomes       RecurringIncome[]
+  goals                  Goal[]
+  inboundMessages        InboundMessage[]
+  balanceSnapshots       BalanceSnapshot[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("users")
+}
+
+// [AGREGADO] Country no está en el doc como tabla, pero el invariante #6
+// ("nada de enums hardcodeados de países o monedas, todo es tabla + seed")
+// menciona países explícitamente. User.countryCode era un string suelto sin
+// tabla de respaldo — lo convierto en FK real. También sirve para defaults
+// de onboarding (país → moneda base sugerida, país → rateType sugerido).
+model Country {
+  code                String  @id // ISO 3166-1 alpha-2, ej. "AR"
+  name                String
+  defaultCurrencyCode String  @map("default_currency_code")
+  defaultCurrency     Currency @relation(fields: [defaultCurrencyCode], references: [code])
+  defaultRateType     RateType? @map("default_rate_type")
+
+  users           User[]
+  inflationIndex  InflationIndex[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("countries")
+}
+
+// [DECISIÓN] Currency usa `code` como PK natural (no uuid sintético). El
+// invariante #7 pide "id uuid" en toda tabla, pero acá el código ISO/ticker
+// YA es un identificador estable y es exactamente lo que se usa como FK
+// desde Transaction/Account/etc. Meter un uuid intermedio solo agregaría un
+// join innecesario en el motor de dinero, que es la parte más caliente del
+// sistema. Avisame si preferís que respete el invariante al pie de la letra.
+model Currency {
+  code      String  @id // ISO 4217 o ticker cripto, ej. "ARS", "USD", "BTC"
+  symbol    String
+  decimals  Int
+  isCrypto  Boolean @map("is_crypto")
+
+  usersAsBase       User[]
+  countriesAsDefault Country[]
+  accounts          Account[]
+  transactions      Transaction[]
+  commitments       Commitment[]
+  commitmentOccurrences CommitmentOccurrence[]
+  recurringIncomes  RecurringIncome[]
+  recurringIncomeOccurrences RecurringIncomeOccurrence[]
+  goals             Goal[]
+  balanceSnapshots  BalanceSnapshot[]
+  ratesAsBase       ExchangeRate[] @relation("RateBaseCurrency")
+  ratesAsQuote      ExchangeRate[] @relation("RateQuoteCurrency")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("currencies")
+}
+
+enum RateType {
+  OFFICIAL
+  BLUE
+  MEP
+  CCL
+  MARKET
+}
+
+model ExchangeRate {
+  id                String   @id @default(uuid()) @db.Uuid
+  baseCurrencyCode  String   @map("base_currency_code")
+  baseCurrency      Currency @relation("RateBaseCurrency", fields: [baseCurrencyCode], references: [code])
+  quoteCurrencyCode String   @map("quote_currency_code")
+  quoteCurrency     Currency @relation("RateQuoteCurrency", fields: [quoteCurrencyCode], references: [code])
+  rateType          RateType @map("rate_type")
+  rate              Decimal  @db.Decimal(30, 10)
+  validAt           DateTime @map("valid_at")
+  source            String
+
+  transactions Transaction[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  // [DOC] índice único (base, quote, rateType, validAt)
+  @@unique([baseCurrencyCode, quoteCurrencyCode, rateType, validAt])
+  @@index([baseCurrencyCode, quoteCurrencyCode, rateType, validAt(sort: Desc)])
+  @@map("exchange_rates")
+}
+
+model InflationIndex {
+  id          String   @id @default(uuid()) @db.Uuid
+  countryCode String   @map("country_code")
+  country     Country  @relation(fields: [countryCode], references: [code])
+  period      String // "YYYY-MM"
+  indexValue  Decimal  @db.Decimal(30, 10) @map("index_value")
+  source      String
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([countryCode, period])
+  @@map("inflation_indices")
+}
+
+// ---------------------------------------------------------------------------
+// CUENTAS Y MOVIMIENTOS
+// ---------------------------------------------------------------------------
+
+enum AccountType {
+  BANK
+  WALLET
+  CASH
+  CRYPTO
+  INVESTMENT
+  CREDIT_CARD
+}
+
+model Account {
+  id              String      @id @default(uuid()) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  user            User        @relation(fields: [userId], references: [id])
+  name            String
+  type            AccountType
+  currencyCode    String      @map("currency_code")
+  currency        Currency    @relation(fields: [currencyCode], references: [code])
+  institutionKey  String?     @map("institution_key") // referencia libre a parsers/*.ts, no enum
+  isLiquid        Boolean     @map("is_liquid") // define qué entra en safe-to-spend y runway
+  initialBalance  Decimal     @db.Decimal(30, 10) @map("initial_balance")
+  isActive        Boolean     @default(true) @map("is_active")
+
+  transactions          Transaction[] @relation("AccountTransactions")
+  counterTransactions    Transaction[] @relation("AccountCounterTransactions")
+  commitments           Commitment[]
+  recurringIncomes      RecurringIncome[]
+  goals                 Goal[]
+  balanceSnapshots      BalanceSnapshot[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+  TRANSFER
+}
+
+enum TransactionStatus {
+  PENDING_REVIEW
+  CONFIRMED
+  IGNORED
+}
+
+enum TransactionSource {
+  EMAIL
+  IMPORT
+  MANUAL
+  RECURRING
+}
+
+model Transaction {
+  id                    String             @id @default(uuid()) @db.Uuid
+  userId                String             @map("user_id") @db.Uuid
+  user                  User               @relation(fields: [userId], references: [id])
+  accountId             String             @map("account_id") @db.Uuid
+  account               Account            @relation("AccountTransactions", fields: [accountId], references: [id])
+  type                  TransactionType
+  amount                Decimal            @db.Decimal(30, 10)
+  currencyCode          String             @map("currency_code")
+  currency              Currency           @relation(fields: [currencyCode], references: [code])
+  // [DECISIÓN] fxRateId es para conversiones que son parte del hecho
+  // financiero en sí (ej. compra en USD que la tarjeta liquida en ARS a un
+  // rate puntual). NO es el rate usado para mostrar totales consolidados en
+  // baseCurrency — eso se calcula en presentación con el rate vigente
+  // (invariante #3) y no se persiste. Son dos conversiones distintas con el
+  // mismo mecanismo de tabla pero momentos distintos.
+  fxRateId              String?            @map("fx_rate_id") @db.Uuid
+  fxRate                ExchangeRate?      @relation(fields: [fxRateId], references: [id])
+  occurredAt            DateTime           @map("occurred_at")
+  description           String?
+  merchantRaw           String?            @map("merchant_raw")
+  merchantNormalized    String?            @map("merchant_normalized")
+  categoryId            String?            @map("category_id") @db.Uuid
+  category              Category?          @relation(fields: [categoryId], references: [id])
+  status                TransactionStatus  @default(PENDING_REVIEW)
+  source                TransactionSource
+  sourceRef             String?            @map("source_ref")
+  // [DECISIÓN] ver nota en la sección de contradicciones: dedupeHash se
+  // calcula con la fecha truncada a día exacto; el matching por ±1 día se
+  // hace con una query aparte en el momento de la ingesta, no en el hash.
+  dedupeHash            String             @map("dedupe_hash")
+  counterAccountId      String?            @map("counter_account_id") @db.Uuid
+  counterAccount        Account?           @relation("AccountCounterTransactions", fields: [counterAccountId], references: [id])
+  commitmentOccurrenceId String?           @unique @map("commitment_occurrence_id") @db.Uuid
+  commitmentOccurrence  CommitmentOccurrence? @relation(fields: [commitmentOccurrenceId], references: [id])
+  notes                 String?
+
+  recurringIncomeOccurrence RecurringIncomeOccurrence?
+  inboundMessage            InboundMessage?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([userId, dedupeHash])
+  @@index([userId, occurredAt])
+  @@index([accountId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model Category {
+  id       String  @id @default(uuid()) @db.Uuid
+  userId   String? @map("user_id") @db.Uuid // null = categoría del sistema
+  user     User?   @relation(fields: [userId], references: [id])
+  name     String
+  icon     String?
+  color    String?
+  parentId String? @map("parent_id") @db.Uuid
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  isSystem Boolean    @map("is_system")
+
+  transactions Transaction[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// COMPROMISOS
+// ---------------------------------------------------------------------------
+
+enum CommitmentKind {
+  CARD_INSTALLMENT
+  SUBSCRIPTION
+  FIXED_EXPENSE
+  LOAN
+  DEBT
+}
+
+model Commitment {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  user            User           @relation(fields: [userId], references: [id])
+  kind            CommitmentKind
+  name            String
+  accountId       String         @map("account_id") @db.Uuid
+  account         Account        @relation(fields: [accountId], references: [id])
+  currencyCode    String         @map("currency_code")
+  currency        Currency       @relation(fields: [currencyCode], references: [code])
+  totalAmount     Decimal        @db.Decimal(30, 10) @map("total_amount")
+  startDate       DateTime       @map("start_date")
+  endDate         DateTime?      @map("end_date")
+  // [DECISIÓN] RRULE (estándar iCal, vía rrule.js) en vez de un formato
+  // custom — necesitamos generar ocurrencias determinísticas y RRULE ya
+  // resuelve mensual/semanal/con excepciones sin reinventar el parser.
+  recurrenceRule  String?        @map("recurrence_rule")
+  isActive        Boolean        @default(true) @map("is_active")
+
+  occurrences CommitmentOccurrence[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("commitments")
+}
+
+enum CommitmentOccurrenceStatus {
+  SCHEDULED
+  PAID
+  SKIPPED
+  OVERDUE
+}
+
+model CommitmentOccurrence {
+  id                String                     @id @default(uuid()) @db.Uuid
+  commitmentId      String                     @map("commitment_id") @db.Uuid
+  commitment        Commitment                 @relation(fields: [commitmentId], references: [id])
+  dueDate           DateTime                   @map("due_date")
+  amount            Decimal                    @db.Decimal(30, 10)
+  currencyCode      String                     @map("currency_code")
+  currency          Currency                   @relation(fields: [currencyCode], references: [code])
+  status            CommitmentOccurrenceStatus @default(SCHEDULED)
+  installmentNumber Int?                       @map("installment_number")
+  installmentTotal  Int?                       @map("installment_total")
+
+  transaction Transaction?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([commitmentId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("commitment_occurrences")
+}
+
+// ---------------------------------------------------------------------------
+// [AGREGADO] INGRESOS RECURRENTES
+//
+// El motor de Safe-to-Spend (PROJECT.md 5.1) necesita
+// "ingresosPrevistos = Σ ingresos recurrentes con fecha < próximo cobro",
+// pero el doc nunca modela esa entidad — Commitment está definido como
+// "plata futura que ya NO es tuya", lo opuesto semántico de un ingreso.
+// Modelo simétrico a Commitment/CommitmentOccurrence: se materializa igual,
+// se matchea contra Transaction igual. Ver punto A de mi lista de
+// contradicciones — confirmame si este es el enfoque que querés.
+// ---------------------------------------------------------------------------
+
+model RecurringIncome {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  user            User      @relation(fields: [userId], references: [id])
+  name            String // ej. "Sueldo", "Freelance Cliente X"
+  accountId       String    @map("account_id") @db.Uuid
+  account         Account   @relation(fields: [accountId], references: [id])
+  currencyCode    String    @map("currency_code")
+  currency        Currency  @relation(fields: [currencyCode], references: [code])
+  expectedAmount  Decimal   @db.Decimal(30, 10) @map("expected_amount")
+  recurrenceRule  String    @map("recurrence_rule") // RRULE
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime? @map("end_date")
+  isActive        Boolean   @default(true) @map("is_active")
+
+  occurrences RecurringIncomeOccurrence[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("recurring_incomes")
+}
+
+enum RecurringIncomeOccurrenceStatus {
+  EXPECTED
+  RECEIVED
+  SKIPPED
+  LATE
+}
+
+model RecurringIncomeOccurrence {
+  id                String                           @id @default(uuid()) @db.Uuid
+  recurringIncomeId String                           @map("recurring_income_id") @db.Uuid
+  recurringIncome   RecurringIncome                  @relation(fields: [recurringIncomeId], references: [id])
+  expectedDate      DateTime                         @map("expected_date")
+  amount            Decimal                          @db.Decimal(30, 10)
+  currencyCode      String                           @map("currency_code")
+  currency          Currency                         @relation(fields: [currencyCode], references: [code])
+  status            RecurringIncomeOccurrenceStatus  @default(EXPECTED)
+  transactionId     String?                          @unique @map("transaction_id") @db.Uuid
+  transaction       Transaction?                     @relation(fields: [transactionId], references: [id])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([recurringIncomeId])
+  @@index([expectedDate])
+  @@index([status])
+  @@map("recurring_income_occurrences")
+}
+
+// ---------------------------------------------------------------------------
+// OBJETIVOS
+// ---------------------------------------------------------------------------
+
+// [AGREGADO] status/priority no venían con valores definidos en el doc.
+// Propongo el set mínimo que necesita la UI de la pantalla "Objetivos".
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum GoalPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Goal {
+  id                   String       @id @default(uuid()) @db.Uuid
+  userId               String       @map("user_id") @db.Uuid
+  user                 User         @relation(fields: [userId], references: [id])
+  name                 String
+  targetAmount         Decimal      @db.Decimal(30, 10) @map("target_amount")
+  currencyCode         String       @map("currency_code")
+  currency             Currency     @relation(fields: [currencyCode], references: [code])
+  targetDate           DateTime?    @map("target_date")
+  accountId            String?      @map("account_id") @db.Uuid
+  account              Account?     @relation(fields: [accountId], references: [id])
+  monthlyContribution  Decimal      @db.Decimal(30, 10) @map("monthly_contribution")
+  status               GoalStatus   @default(ACTIVE)
+  priority             GoalPriority @default(MEDIUM)
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@map("goals")
+}
+
+// ---------------------------------------------------------------------------
+// INGESTA
+// ---------------------------------------------------------------------------
+
+enum ParseStatus {
+  PENDING
+  PARSED
+  FAILED
+  IGNORED
+}
+
+model InboundMessage {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  user          User        @relation(fields: [userId], references: [id])
+  receivedAt    DateTime    @map("received_at")
+  fromAddress   String      @map("from_address")
+  subject       String?
+  rawBody       String      @map("raw_body") @db.Text
+  parserKey     String?     @map("parser_key")
+  parseStatus   ParseStatus @default(PENDING) @map("parse_status")
+  transactionId String?     @unique @map("transaction_id") @db.Uuid
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+  errorDetail   String?     @map("error_detail")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([userId])
+  @@index([parseStatus])
+  @@map("inbound_messages")
+}
+
+model BalanceSnapshot {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id])
+  accountId    String   @map("account_id") @db.Uuid
+  account      Account  @relation(fields: [accountId], references: [id])
+  date         DateTime @db.Date
+  balance      Decimal  @db.Decimal(30, 10)
+  currencyCode String   @map("currency_code")
+  currency     Currency @relation(fields: [currencyCode], references: [code])
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@unique([accountId, date])
+  @@index([userId])
+  @@map("balance_snapshots")
+}
