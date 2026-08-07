@@ -16,17 +16,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-svh flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
         <nav className="flex items-center gap-4 text-sm font-medium">
-          <Link href="/today" className="hover:underline">
-            Hoy
+          <Link href="/planilla" className="hover:underline">
+            Planilla
           </Link>
           <Link href="/accounts" className="hover:underline">
             Cuentas
           </Link>
-          <Link href="/transactions" className="hover:underline">
-            Movimientos
-          </Link>
-          <Link href="/commitments" className="hover:underline">
-            Compromisos
+          <Link href="/ahorro" className="hover:underline">
+            Ahorro
           </Link>
         </nav>
         <form

@@ -21,6 +21,7 @@ export async function createAccount(
     currencyCode: formData.get("currencyCode"),
     institutionKey: formData.get("institutionKey"),
     isLiquid: formData.get("isLiquid") === "on",
+    isSavings: formData.get("isSavings") === "on",
     initialBalance: formData.get("initialBalance"),
   });
 
@@ -50,12 +51,15 @@ export async function createAccount(
       currencyCode: parsed.data.currencyCode,
       institutionKey: parsed.data.institutionKey ?? null,
       isLiquid: parsed.data.isLiquid,
+      isSavings: parsed.data.isSavings,
       initialBalance: initialBalance.toString(),
       isActive: true,
     },
   });
 
   revalidatePath("/accounts");
+  revalidatePath("/ahorro");
+  revalidatePath("/planilla");
   redirect("/accounts");
 }
 
@@ -78,6 +82,7 @@ export async function updateAccount(
     type: formData.get("type"),
     institutionKey: formData.get("institutionKey"),
     isLiquid: formData.get("isLiquid") === "on",
+    isSavings: formData.get("isSavings") === "on",
     isActive: formData.get("isActive") === "on",
     initialBalance: formData.get("initialBalance"),
   });
@@ -100,11 +105,14 @@ export async function updateAccount(
       type: parsed.data.type,
       institutionKey: parsed.data.institutionKey ?? null,
       isLiquid: parsed.data.isLiquid,
+      isSavings: parsed.data.isSavings,
       isActive: parsed.data.isActive,
       initialBalance: initialBalance.toString(),
     },
   });
 
   revalidatePath("/accounts");
+  revalidatePath("/ahorro");
+  revalidatePath("/planilla");
   redirect("/accounts");
 }

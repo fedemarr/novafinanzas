@@ -32,6 +32,7 @@ export const accountFormSchema = z.object({
   currencyCode: z.string().min(1, "Elegí una moneda."),
   institutionKey: institutionKeyField,
   isLiquid: z.coerce.boolean(),
+  isSavings: z.coerce.boolean(),
   initialBalance: z.string().min(1, "Ingresá un saldo inicial."),
 });
 
@@ -44,6 +45,7 @@ export const accountEditSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   institutionKey: institutionKeyField,
   isLiquid: z.coerce.boolean(),
+  isSavings: z.coerce.boolean(),
   isActive: z.coerce.boolean(),
   initialBalance: z.string().min(1, "Ingresá un saldo inicial."),
 });

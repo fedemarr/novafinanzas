@@ -24,6 +24,7 @@ interface ExistingAccount {
   currencyCode: string;
   institutionKey: string | null;
   isLiquid: boolean;
+  isSavings: boolean;
   isActive: boolean;
   initialBalance: string;
 }
@@ -123,6 +124,16 @@ export function AccountForm({ currencies, account }: AccountFormProps) {
           className="size-4"
         />
         Cuenta líquida (entra en safe-to-spend y runway)
+      </label>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="isSavings"
+          defaultChecked={account?.isSavings ?? false}
+          className="size-4"
+        />
+        Es de ahorro (para apartar plata, no para gastar)
       </label>
 
       {account ? (

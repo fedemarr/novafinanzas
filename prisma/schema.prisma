@@ -192,6 +192,9 @@ model Account {
   currency        Currency    @relation(fields: [currencyCode], references: [code])
   institutionKey  String?     @map("institution_key") // referencia libre a parsers/*.ts, no enum
   isLiquid        Boolean     @map("is_liquid") // define qué entra en safe-to-spend y runway
+  // [AGREGADO v2] la plata que el usuario "aparta" (ahorro) vive en cuentas
+  // marcadas como de ahorro; "Apartar" = transferencia a una de estas cuentas.
+  isSavings       Boolean     @default(false) @map("is_savings")
   initialBalance  Decimal     @db.Decimal(30, 10) @map("initial_balance")
   isActive        Boolean     @default(true) @map("is_active")
 

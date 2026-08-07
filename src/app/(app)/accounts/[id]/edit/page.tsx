@@ -31,6 +31,7 @@ export default async function EditAccountPage({
           currencyCode: account.currencyCode,
           institutionKey: account.institutionKey,
           isLiquid: account.isLiquid,
+          isSavings: account.isSavings,
           isActive: account.isActive,
           initialBalance: account.initialBalance.toString(),
         }}
