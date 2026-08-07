@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createAccount, updateAccount, type AccountFormState } from "../actions";
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from "../schemas";
+import { knownParserKeys } from "@/lib/ingest/parsers/registry";
+
+const KNOWN_PARSER_KEYS = knownParserKeys();
 
 const initialState: AccountFormState = { error: null };
 
@@ -97,9 +100,19 @@ export function AccountForm({ currencies, account }: AccountFormProps) {
         <Input
           id="institutionKey"
           name="institutionKey"
+          list="known-institutions"
           defaultValue={account?.institutionKey ?? ""}
           placeholder="ej. santander, mercadopago"
         />
+        <datalist id="known-institutions">
+          {KNOWN_PARSER_KEYS.map((key) => (
+            <option key={key} value={key} />
+          ))}
+        </datalist>
+        <p className="text-xs text-muted-foreground">
+          Si esta cuenta recibe mails de un banco o billetera, elegí la institución para que
+          las compras entren automáticamente.
+        </p>
       </div>
 
       <label className="flex items-center gap-2 text-sm">

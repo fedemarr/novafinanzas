@@ -165,3 +165,54 @@ function isDedupeCollision(err: unknown): boolean {
   const targets = Array.isArray(target) ? target.map(String) : [String(target)];
   return targets.some((t) => t.toLowerCase().includes("dedupe"));
 }
+
+// ============================================================================
+// Triage (M4): las transacciones que entran por mail (source=EMAIL) se crean
+// PENDING_REVIEW y esperan confirmación en la pantalla Movimientos. Confirmar
+// → CONFIRMED (+ categoría opcional); descartar → IGNORED (desaparece del
+// feed). El matching contra compromisos (linkear a CommitmentOccurrence) es M5.
+// ============================================================================
+
+export async function confirmTransaction(
+  transactionId: string,
+  formData: FormData,
+): Promise<void> {
+  const userId = await requireUserId();
+
+  const existing = await prisma.transaction.findFirst({
+    where: { id: transactionId, userId, deletedAt: null, status: "PENDING_REVIEW" },
+  });
+  if (!existing) return;
+
+  const rawCategory = formData.get("categoryId");
+  let categoryId: string | null = null;
+  if (typeof rawCategory === "string" && rawCategory) {
+    const category = await prisma.category.findFirst({
+      where: {
+        id: rawCategory,
+        deletedAt: null,
+        OR: [{ isSystem: true }, { userId }],
+      },
+    });
+    if (!category) return;
+    categoryId = category.id;
+  }
+
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { status: "CONFIRMED", categoryId },
+  });
+
+  revalidatePath("/transactions");
+}
+
+export async function ignoreTransaction(transactionId: string): Promise<void> {
+  const userId = await requireUserId();
+
+  await prisma.transaction.updateMany({
+    where: { id: transactionId, userId, deletedAt: null, status: "PENDING_REVIEW" },
+    data: { status: "IGNORED" },
+  });
+
+  revalidatePath("/transactions");
+}

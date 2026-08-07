@@ -502,6 +502,10 @@ model InboundMessage {
   fromAddress   String      @map("from_address")
   subject       String?
   rawBody       String      @map("raw_body") @db.Text
+  // [AGREGADO M4] MessageID del proveedor de inbound (Postmark). Se usa
+  // para (a) idempotencia del webhook — Postmark reintenta deliveries y no
+  // queremos duplicar — y (b) pasar sourceRef a la Transaction creada.
+  sourceRef     String?     @map("source_ref")
   parserKey     String?     @map("parser_key")
   parseStatus   ParseStatus @default(PENDING) @map("parse_status")
   transactionId String?     @unique @map("transaction_id") @db.Uuid
@@ -512,6 +516,7 @@ model InboundMessage {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
+  @@unique([userId, sourceRef])
   @@index([userId])
   @@index([parseStatus])
   @@map("inbound_messages")

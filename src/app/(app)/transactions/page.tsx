@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { requireUserId } from "@/lib/auth/require-user";
-import { listTransactionsFeed } from "@/features/transactions/queries";
+import { listTransactionsFeed, listPendingReview, listCategoriesForSelect } from "@/features/transactions/queries";
 import { listCurrencies } from "@/features/accounts/queries";
 import { TransactionList } from "@/features/transactions/components/transaction-list";
+import { TriageList } from "@/features/transactions/components/triage-list";
 
 export default async function TransactionsPage() {
   const userId = await requireUserId();
-  const [transactions, currencies] = await Promise.all([
+  const [transactions, pending, currencies, categories] = await Promise.all([
     listTransactionsFeed(userId),
+    listPendingReview(userId),
     listCurrencies(),
+    listCategoriesForSelect(),
   ]);
 
   const currencyMetaByCode = new Map(
@@ -24,6 +27,7 @@ export default async function TransactionsPage() {
           Nuevo movimiento
         </Link>
       </div>
+      <TriageList pending={pending} categories={categories} currencyMetaByCode={currencyMetaByCode} />
       <TransactionList transactions={transactions} currencyMetaByCode={currencyMetaByCode} />
     </div>
   );
