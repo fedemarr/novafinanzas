@@ -1,13 +1,17 @@
 # src/lib/domain
 
-Acá vive toda la lógica de negocio del producto — nunca en componentes React
-ni en route handlers (ver CLAUDE.md).
+Lógica de negocio pura — nunca en componentes React ni en route handlers
+(ver CLAUDE.md). Todo lo que toca dinero acá adentro tiene tests.
 
-Vacío a propósito en M0. Los motores de cálculo (Safe-to-Spend, Runway,
-Poder Adquisitivo Real) entran en M3/M7. Cuando se agregue código acá:
+- `money.ts` — tipo `Money` (par amount+currency), parseo de input de
+  usuario, suma/resta (solo misma moneda).
+- `exchange-rate.ts` — conversión pura dado un rate ya resuelto. No
+  consulta la DB — eso vive en `features/*/queries.ts`.
+- `account-balance.ts` — balance de una cuenta a partir de su saldo
+  inicial + transacciones (M1).
+- `dedupe-hash.ts` — hash determinístico para detectar duplicados exactos.
+  El matching difuso (±1 día, mail vs. resumen) es una query aparte, no
+  este hash — se resuelve en M4/M5.
 
-- Todo monto es el par `(amount, currency)` — nunca un valor suelto.
-- Nunca `number`/`float` para dinero — usar `decimal.js` en el cliente,
-  `Prisma.Decimal` del lado del servidor.
-- Tests unitarios obligatorios, con casos de multi-moneda, meses sin
-  ingreso, y compromisos vencidos.
+Pendiente (fuera de alcance hasta su milestone): Safe-to-Spend (M3),
+Runway y Poder Adquisitivo Real (M7).
