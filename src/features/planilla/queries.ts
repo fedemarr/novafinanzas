@@ -76,9 +76,7 @@ export interface Planilla {
 }
 
 const NO_CATEGORY_COLUMN_ID = "__none__";
-const MARGIN_MS = 2 * 24 * 60 * 60 * 1000;
-
-export async function getPlanilla(
+const MARGIN_MS = 2 * 24 * 60 * 60 * 1000;export async function getPlanilla(
   userId: string,
   key: MonthKey,
   currencyCode: string,
@@ -232,4 +230,72 @@ export async function getMonthlyTotals(
     });
   }
   return result;
+}
+
+// ============================================================================
+// Edición (v2): la grilla es de solo lectura, pero cada día se puede abrir
+// para editar/borrar los movimientos que lo componen. Acá los movimientos del
+// mes ya serializados para pasar a un Client Component (sin Decimal).
+// ============================================================================
+
+export interface MonthEntry {
+  id: string;
+  day: number;
+  type: "EXPENSE" | "INCOME";
+  /** String serializado para el cliente. */
+  amount: string;
+  categoryId: string | null;
+  categoryName: string;
+  categoryIcon: string | null;
+  categoryColor: string | null;
+  description: string | null;
+  accountName: string;
+  /** Fecha local "YYYY-MM-DD" para el form de edición. */
+  occurredAt: string;
+}
+
+export async function listMonthEntries(
+  userId: string,
+  key: MonthKey,
+  currencyCode: string,
+  timeZone: string,
+): Promise<MonthEntry[]> {
+  const monthPrefix = monthKeyToString(key);
+  const windowStart = new Date(Date.UTC(key.year, key.month - 1, 1));
+  const windowEnd = new Date(Date.UTC(key.year, key.month, 1));
+
+  const transactions = await prisma.transaction.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      status: "CONFIRMED",
+      type: { in: ["EXPENSE", "INCOME"] },
+      currencyCode,
+      occurredAt: {
+        gte: new Date(windowStart.getTime() - MARGIN_MS),
+        lt: new Date(windowEnd.getTime() + MARGIN_MS),
+      },
+    },
+    include: {
+      category: { select: { id: true, name: true, icon: true, color: true } },
+      account: { select: { name: true } },
+    },
+    orderBy: { occurredAt: "asc" },
+  });
+
+  return transactions
+    .filter((tx) => localDateString(tx.occurredAt, timeZone).startsWith(monthPrefix))
+    .map((tx) => ({
+      id: tx.id,
+      day: Number(localDateString(tx.occurredAt, timeZone).slice(8, 10)),
+      type: tx.type as "EXPENSE" | "INCOME",
+      amount: tx.amount.toString(),
+      categoryId: tx.categoryId,
+      categoryName: tx.category?.name ?? "Sin categoría",
+      categoryIcon: tx.category?.icon ?? null,
+      categoryColor: tx.category?.color ?? null,
+      description: tx.description,
+      accountName: tx.account.name,
+      occurredAt: localDateString(tx.occurredAt, timeZone),
+    }));
 }

@@ -7,6 +7,7 @@ import { listCategoriesForSelect } from "@/features/transactions/queries";
 import {
   getMonthlyTotals,
   getPlanilla,
+  listMonthEntries,
   monthKeyToString,
   parseMonthKey,
 } from "@/features/planilla/queries";
@@ -14,6 +15,7 @@ import { buildPlanillaChartData } from "@/features/planilla/chart-data";
 import { QuickEntryForm } from "@/features/planilla/components/quick-entry-form";
 import { MonthGrid } from "@/features/planilla/components/month-grid";
 import { MonthSummary } from "@/features/planilla/components/month-summary";
+import { DayEntriesPanel } from "@/features/planilla/components/day-entries-panel";
 import { CategoryDonut } from "@/features/planilla/components/charts/category-donut";
 import { DailyBars } from "@/features/planilla/components/charts/daily-bars";
 import { MonthlyTrend } from "@/features/planilla/components/charts/monthly-trend";
@@ -21,7 +23,7 @@ import { MonthlyTrend } from "@/features/planilla/components/charts/monthly-tren
 export default async function PlanillaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; moneda?: string; cat?: string }>;
+  searchParams: Promise<{ mes?: string; moneda?: string; cat?: string; dia?: string }>;
 }) {
   const sp = await searchParams;
   const userId = await requireUserId();
@@ -31,12 +33,15 @@ export default async function PlanillaPage({
   const currencyCode =
     sp.moneda === "USD" ? "USD" : sp.moneda === "ARS" ? "ARS" : user.baseCurrencyCode;
   const rawFilter = sp.cat;
+  const rawDay = sp.dia ? Number(sp.dia) : NaN;
+  const selectedDay = Number.isInteger(rawDay) && rawDay >= 1 && rawDay <= 31 ? rawDay : null;
 
-  const [currencies, categories, planilla, trend] = await Promise.all([
+  const [currencies, categories, planilla, trend, monthEntries] = await Promise.all([
     listCurrencies(),
     listCategoriesForSelect(),
     getPlanilla(userId, key, currencyCode, user.timezone),
     getMonthlyTotals(userId, currencyCode, user.timezone, key, 6),
+    listMonthEntries(userId, key, currencyCode, user.timezone),
   ]);
 
   const currencyMetaByCode = new Map(
@@ -59,6 +64,8 @@ export default async function PlanillaPage({
     `/planilla?${baseQuery}`,
   );
   const clearFilterHref = `/planilla?${baseQuery}`;
+  const dayHref = (day: number) => `/planilla?${baseQuery}&dia=${day}`;
+  const closeDayHref = clearFilterHref;
   const monthLink = (offset: number) => {
     const next = new Date(Date.UTC(key.year, key.month - 1 + offset, 1));
     const y = next.getUTCFullYear();
@@ -159,7 +166,21 @@ export default async function PlanillaPage({
         </div>
       ) : null}
 
-      <MonthGrid planilla={planilla} currencyMeta={currencyMeta} filterCategoryId={filterCategoryId} />
+      <MonthGrid
+        planilla={planilla}
+        currencyMeta={currencyMeta}
+        filterCategoryId={filterCategoryId}
+        dayHref={dayHref}
+      />
+
+      <DayEntriesPanel
+        entries={monthEntries}
+        selectedDay={selectedDay}
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        currencyCode={currencyCode}
+        currencyMeta={currencyMeta}
+        closeHref={closeDayHref}
+      />
     </div>
   );
 }

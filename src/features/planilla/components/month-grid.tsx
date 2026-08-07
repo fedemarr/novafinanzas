@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type Decimal from "decimal.js";
 import type { Planilla } from "../queries";
 import { formatMoney, money } from "@/lib/domain/money";
@@ -12,9 +13,11 @@ interface MonthGridProps {
   currencyMeta: CurrencyMeta;
   /** Si viene, la grilla muestra solo esa categoría (filtro del donut). */
   filterCategoryId?: string | null;
+  /** Si viene, los días son links que abren los movimientos de ese día. */
+  dayHref?: (day: number) => string;
 }
 
-export function MonthGrid({ planilla, currencyMeta, filterCategoryId }: MonthGridProps) {
+export function MonthGrid({ planilla, currencyMeta, filterCategoryId, dayHref }: MonthGridProps) {
   const columns = filterCategoryId
     ? planilla.categories.filter((c) => c.id === filterCategoryId)
     : planilla.categories;
@@ -69,7 +72,19 @@ export function MonthGrid({ planilla, currencyMeta, filterCategoryId }: MonthGri
         <tbody>
           {rows.map((row) => (
             <tr key={row.day} className="border-b last:border-b-0">
-              <td className="px-2 py-1 tabular-nums text-muted-foreground">{row.day}</td>
+              <td className="px-2 py-1 tabular-nums text-muted-foreground">
+                {dayHref ? (
+                  <Link
+                    href={dayHref(row.day)}
+                    className="inline-flex size-6 items-center justify-center rounded-md tabular-nums hover:bg-muted hover:text-foreground"
+                    aria-label={`Movimientos del día ${row.day}`}
+                  >
+                    {row.day}
+                  </Link>
+                ) : (
+                  row.day
+                )}
+              </td>
               {columns.map((cat) => {
                 const value = row.cells.get(cat.id);
                 return (

@@ -122,6 +122,128 @@ export async function createQuickEntry(
   return { error: null, success: true };
 }
 
+// ============================================================================
+// Edición/borrado (v2): desde la grilla se abre el día y cada movimiento se
+// puede editar (monto, categoría, detalle, fecha) o borrar (soft delete).
+// La moneda y la cuenta quedan fijas — editarlas rompería el balance.
+// ============================================================================
+
+export type EditEntryState = { error: string | null; success: boolean };
+
+const editEntrySchema = z.object({
+  amount: z.string().min(1, "Ingresá un monto."),
+  categoryId: z.string().optional().or(z.literal("")),
+  occurredAt: z.string().min(1, "Elegí la fecha."),
+  description: z.string().max(200).optional().or(z.literal("")),
+});
+
+export async function updatePlanillaEntry(
+  entryId: string,
+  _prevState: EditEntryState,
+  formData: FormData,
+): Promise<EditEntryState> {
+  const userId = await requireUserId();
+
+  const existing = await prisma.transaction.findFirst({
+    where: {
+      id: entryId,
+      userId,
+      deletedAt: null,
+      type: { in: ["EXPENSE", "INCOME"] },
+    },
+  });
+  if (!existing) {
+    return { error: "Movimiento no encontrado.", success: false };
+  }
+
+  const parsed = editEntrySchema.safeParse({
+    amount: formData.get("amount"),
+    categoryId: formData.get("categoryId"),
+    occurredAt: formData.get("occurredAt"),
+    description: formData.get("description"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos.", success: false };
+  }
+  const data = parsed.data;
+
+  let amount;
+  try {
+    amount = parseAmountInput(data.amount);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Monto inválido.", success: false };
+  }
+
+  const occurredAt = new Date(`${data.occurredAt}T12:00:00.000Z`);
+  if (Number.isNaN(occurredAt.getTime())) {
+    return { error: "Fecha inválida.", success: false };
+  }
+
+  let categoryId: string | null = null;
+  if (data.categoryId) {
+    const category = await prisma.category.findFirst({
+      where: { id: data.categoryId, deletedAt: null, OR: [{ isSystem: true }, { userId }] },
+    });
+    if (!category) {
+      return { error: "Categoría inválida.", success: false };
+    }
+    categoryId = category.id;
+  }
+
+  const dedupeHash = computeDedupeHash({
+    userId,
+    accountId: existing.accountId,
+    amount: amount.toString(),
+    currency: existing.currencyCode,
+    occurredAt,
+    merchantKey: data.description || null,
+  });
+
+  try {
+    await prisma.transaction.update({
+      where: { id: entryId },
+      data: {
+        amount: amount.toString(),
+        categoryId,
+        description: data.description || null,
+        occurredAt,
+        dedupeHash,
+      },
+    });
+  } catch (err) {
+    if (isDedupeCollision(err)) {
+      return {
+        error: "Ya cargaste un movimiento igual para esta cuenta y este día.",
+        success: false,
+      };
+    }
+    throw err;
+  }
+
+  revalidatePath("/planilla");
+  revalidatePath("/ahorro");
+  revalidatePath("/accounts");
+  return { error: null, success: true };
+}
+
+export async function deletePlanillaEntry(entryId: string): Promise<void> {
+  const userId = await requireUserId();
+
+  await prisma.transaction.updateMany({
+    where: {
+      id: entryId,
+      userId,
+      deletedAt: null,
+      type: { in: ["EXPENSE", "INCOME"] },
+    },
+    data: { deletedAt: new Date() },
+  });
+
+  revalidatePath("/planilla");
+  revalidatePath("/ahorro");
+  revalidatePath("/accounts");
+}
+
 function isDedupeCollision(err: unknown): boolean {
   if (!(err instanceof Prisma.PrismaClientKnownRequestError)) return false;
   if (err.code !== "P2002") return false;
