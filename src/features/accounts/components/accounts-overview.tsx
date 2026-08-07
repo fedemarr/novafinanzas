@@ -54,6 +54,11 @@ export function AccountsOverviewView({ overview, currencyMetaByCode }: AccountsO
                 <div>
                   <p className="font-medium">
                     {account.name}
+                    {account.isSavings ? (
+                      <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                        Ahorro
+                      </span>
+                    ) : null}
                     {!account.isActive ? (
                       <span className="ml-2 text-xs text-muted-foreground">(inactiva)</span>
                     ) : null}

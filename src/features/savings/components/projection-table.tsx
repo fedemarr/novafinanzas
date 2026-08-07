@@ -1,6 +1,7 @@
 import { TrendingUp } from "lucide-react";
 import { formatMoney, type Money } from "@/lib/domain/money";
 import { averageMonthlySavings, projectSavings } from "@/lib/domain/savings-projection";
+import { SavingsAccumulationChart } from "./savings-accumulation-chart";
 
 interface CurrencyMeta {
   symbol: string;
@@ -75,6 +76,17 @@ export function ProjectionTable({ monthlySaved, currencyMetaByCode, timeZone }: 
               Si seguís apartando <span className="font-medium text-foreground">{fmt(average)}</span> por
               mes…
             </p>
+            <div className="mb-4 rounded-lg border bg-muted/20 p-3">
+              <SavingsAccumulationChart
+                symbol={meta.symbol}
+                decimals={meta.decimals}
+                currencyCode={currency}
+                points={projected.map((month) => ({
+                  label: labels[month.offset - 1],
+                  cumulative: month.cumulative.toString(),
+                }))}
+              />
+            </div>
             <div className="overflow-hidden rounded-lg border">
               <table className="w-full border-collapse text-sm">
                 <thead>

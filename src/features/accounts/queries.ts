@@ -17,6 +17,7 @@ export interface AccountWithBalance {
   type: string;
   currencyCode: string;
   isLiquid: boolean;
+  isSavings: boolean;
   isActive: boolean;
   institutionKey: string | null;
   balance: Money;
@@ -93,6 +94,7 @@ export async function listAccountsWithBalances(userId: string): Promise<Accounts
       type: account.type,
       currencyCode: account.currencyCode,
       isLiquid: account.isLiquid,
+      isSavings: account.isSavings,
       isActive: account.isActive,
       institutionKey: account.institutionKey,
       balance,

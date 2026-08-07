@@ -23,7 +23,7 @@ export function LoginForm() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle>Iniciar sesión</CardTitle>
-        <CardDescription>¿Cuánto podés gastar hoy? Entrá para verlo.</CardDescription>
+        <CardDescription>Tu planilla de gastos y tu ahorro, en un solo lugar.</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-4">

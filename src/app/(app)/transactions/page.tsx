@@ -1,34 +1,8 @@
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import { requireUserId } from "@/lib/auth/require-user";
-import { listTransactionsFeed, listPendingReview, listCategoriesForSelect } from "@/features/transactions/queries";
-import { listCurrencies } from "@/features/accounts/queries";
-import { TransactionList } from "@/features/transactions/components/transaction-list";
-import { TriageList } from "@/features/transactions/components/triage-list";
+import { redirect } from "next/navigation";
 
+// [v2] Movimientos (M1) quedó fuera de la app v2: el ingreso de gastos ahora
+// es la carga rápida de la planilla. La ruta se mantiene solo para no romper
+// links viejos y redirige a la planilla.
 export default async function TransactionsPage() {
-  const userId = await requireUserId();
-  const [transactions, pending, currencies, categories] = await Promise.all([
-    listTransactionsFeed(userId),
-    listPendingReview(userId),
-    listCurrencies(),
-    listCategoriesForSelect(),
-  ]);
-
-  const currencyMetaByCode = new Map(
-    currencies.map((c) => [c.code, { symbol: c.symbol, decimals: c.decimals }]),
-  );
-
-  return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Movimientos</h1>
-        <Link href="/transactions/new" className={buttonVariants({ size: "sm" })}>
-          Nuevo movimiento
-        </Link>
-      </div>
-      <TriageList pending={pending} categories={categories} currencyMetaByCode={currencyMetaByCode} />
-      <TransactionList transactions={transactions} currencyMetaByCode={currencyMetaByCode} />
-    </div>
-  );
+  redirect("/planilla");
 }
