@@ -22,6 +22,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <Link href="/transactions" className="hover:underline">
             Movimientos
           </Link>
+          <Link href="/commitments" className="hover:underline">
+            Compromisos
+          </Link>
         </nav>
         <form
           action={async () => {
