@@ -12,11 +12,9 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 interface CategoryDonutProps {
   data: PlanillaChartData;
   selectedCategoryId: string | null;
-  /** Devuelve el href al tocar una categoría (null = limpiar filtro). */
-  filterHref: (categoryId: string | null) => string;
 }
 
-export function CategoryDonut({ data, selectedCategoryId, filterHref }: CategoryDonutProps) {
+export function CategoryDonut({ data, selectedCategoryId }: CategoryDonutProps) {
   const total = Number(data.totalExpenses);
 
   if (data.categories.length === 0) {
@@ -26,6 +24,9 @@ export function CategoryDonut({ data, selectedCategoryId, filterHref }: Category
       </p>
     );
   }
+
+  const categoryHref = (categoryId: string | null) =>
+    data.baseHref + (categoryId ? `&cat=${encodeURIComponent(categoryId)}` : "");
 
   const rawLengths = data.categories.map((slice) =>
     total > 0 ? (Number(slice.total) / total) * CIRCUMFERENCE : 0,
@@ -53,7 +54,7 @@ export function CategoryDonut({ data, selectedCategoryId, filterHref }: Category
             stroke="var(--muted)"
           />
           {segments.map((seg) => (
-            <Link key={seg.slice.id} href={filterHref(seg.slice.id)}>
+            <Link key={seg.slice.id} href={categoryHref(seg.slice.id)}>
               <circle
                 cx={SIZE / 2}
                 cy={SIZE / 2}
@@ -86,7 +87,7 @@ export function CategoryDonut({ data, selectedCategoryId, filterHref }: Category
           return (
             <li key={seg.slice.id}>
               <Link
-                href={filterHref(selected ? null : seg.slice.id)}
+                href={categoryHref(selected ? null : seg.slice.id)}
                 className={
                   "flex items-center justify-between gap-2 rounded-md px-2 py-1 transition-colors " +
                   (selected ? "bg-muted font-medium ring-1 ring-foreground/10" : "hover:bg-muted/60")

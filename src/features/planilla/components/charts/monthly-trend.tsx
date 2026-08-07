@@ -14,8 +14,6 @@ const PLOT_H = H - PAD_TOP - PAD_BOTTOM;
 
 interface MonthlyTrendProps {
   data: PlanillaChartData;
-  /** Navega a la planilla de ese mes (key "YYYY-MM"). */
-  monthHref: (key: string) => string;
 }
 
 function shortMonth(key: string): string {
@@ -24,7 +22,7 @@ function shortMonth(key: string): string {
     .replace(".", "");
 }
 
-export function MonthlyTrend({ data, monthHref }: MonthlyTrendProps) {
+export function MonthlyTrend({ data }: MonthlyTrendProps) {
   const points = data.trend;
   const max = Math.max(...points.map((p) => Number(p.total)), 1);
   const n = points.length;
@@ -54,7 +52,7 @@ export function MonthlyTrend({ data, monthHref }: MonthlyTrendProps) {
       ) : null}
 
       {coords.map((c, i) => (
-        <Link key={points[i].key} href={monthHref(points[i].key)}>
+        <Link key={points[i].key} href={points[i].href}>
           <circle cx={c.x} cy={c.y} r={4} fill="var(--background)" stroke="currentColor" strokeWidth={2} className="cursor-pointer">
             <title>
               {points[i].label}: {fmtAmount(points[i].total)}
@@ -64,7 +62,7 @@ export function MonthlyTrend({ data, monthHref }: MonthlyTrendProps) {
       ))}
 
       {coords.map((c, i) => (
-        <Link key={`label-${points[i].key}`} href={monthHref(points[i].key)}>
+        <Link key={`label-${points[i].key}`} href={points[i].href}>
           <text
             x={c.x}
             y={H - 8}

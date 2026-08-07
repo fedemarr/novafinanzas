@@ -23,12 +23,16 @@ export interface TrendPoint {
   key: string;
   label: string;
   total: string;
+  /** Link a la planilla de ese mes. */
+  href: string;
 }
 
 export interface PlanillaChartData {
   symbol: string;
   decimals: number;
   currencyCode: string;
+  /** Base de los links de filtro por categoría (incluye ?mes y ?moneda). */
+  baseHref: string;
   categories: CategorySlice[];
   totalExpenses: string;
   totalIncome: string;
@@ -42,11 +46,13 @@ export function buildPlanillaChartData(
   trend: MonthTotal[],
   symbol: string,
   decimals: number,
+  baseHref: string,
 ): PlanillaChartData {
   return {
     symbol,
     decimals,
     currencyCode: planilla.currencyCode,
+    baseHref,
     categories: planilla.categories.map((c) => ({
       id: c.id,
       name: c.name,
@@ -62,6 +68,7 @@ export function buildPlanillaChartData(
       key: `${t.key.year}-${String(t.key.month).padStart(2, "0")}`,
       label: t.label,
       total: t.total.toString(),
+      href: `/planilla?mes=${t.key.year}-${String(t.key.month).padStart(2, "0")}&moneda=${planilla.currencyCode}`,
     })),
   };
 }

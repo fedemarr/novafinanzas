@@ -48,18 +48,17 @@ export default async function PlanillaPage({
     ? rawFilter!
     : null;
 
+  const monthKey = monthKeyToString(key);
+  const baseQuery = `mes=${monthKey}&moneda=${currencyCode}`;
+
   const chartData = buildPlanillaChartData(
     planilla,
     trend,
     currencyMeta.symbol,
     currencyMeta.decimals,
+    `/planilla?${baseQuery}`,
   );
-
-  const monthKey = monthKeyToString(key);
-  const baseQuery = `mes=${monthKey}&moneda=${currencyCode}`;
-  const filterHref = (categoryId: string | null) =>
-    `/planilla?${baseQuery}${categoryId ? `&cat=${encodeURIComponent(categoryId)}` : ""}`;
-  const monthHref = (k: string) => `/planilla?mes=${k}&moneda=${currencyCode}`;
+  const clearFilterHref = `/planilla?${baseQuery}`;
   const monthLink = (offset: number) => {
     const next = new Date(Date.UTC(key.year, key.month - 1 + offset, 1));
     const y = next.getUTCFullYear();
@@ -128,11 +127,7 @@ export default async function PlanillaPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className={chartCard}>
           <h2 className="mb-3 text-sm font-medium">Gastos por categoría</h2>
-          <CategoryDonut
-            data={chartData}
-            selectedCategoryId={filterCategoryId}
-            filterHref={filterHref}
-          />
+          <CategoryDonut data={chartData} selectedCategoryId={filterCategoryId} />
         </div>
         <div className={chartCard}>
           <h2 className="mb-3 text-sm font-medium">Gastos por día</h2>
@@ -142,7 +137,7 @@ export default async function PlanillaPage({
 
       <div className={chartCard}>
         <h2 className="mb-3 text-sm font-medium">Últimos 6 meses</h2>
-        <MonthlyTrend data={chartData} monthHref={monthHref} />
+        <MonthlyTrend data={chartData} />
       </div>
 
       <div>
@@ -156,7 +151,7 @@ export default async function PlanillaPage({
             Grilla filtrada por la categoría seleccionada en el gráfico.
           </span>
           <Link
-            href={filterHref(null)}
+            href={clearFilterHref}
             className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
           >
             <X className="size-3.5" /> Ver todas
